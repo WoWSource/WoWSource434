@@ -1,0 +1,290 @@
+phase_definitions Table
+
+[Assignment]
+
+`zoneId`
+=================
+The zoneId represents the zoneId from the zone where the definition is valid.
+Only definitions are applied to the player if the current zoneid of the player is the same as in the phase definition.
+
+That means:
+- Deepholm definitions must have the zoneId: 5042
+- Mount Hyjal definitions must have the zoneId: 616
+
+`entry`
+=================
+Entrys are unique per zoneId.
+Phase Definitions are applied in the order lowest entry -> highest entry.
+
+It is important that you use higher entrys for later phases than lower phases, because
+if you don't, you will loose the possibility to realize complex phasing dependent on huge quest chains.
+
+[Conditions]
+
+If the conditions of the phase definition fits to the player, the phasemask, terrainswap and phaseid will be applied/ send
+to the player.
+
+Condition Structure:
+
+ConditionSourceType : CONDITION_SOURCE_TYPE_PHASE_DEFINITION (25)
+SourceGroup : Is the zoneId of the phase definition.
+SourceEntry : Is the entry of the phase deinition.
+
+Currently you can only use following condition types:
+
+- CONDITION_QUESTREWARDED(8)
+- CONDITION_QUESTTAKEN(9)
+- CONDITION_QUEST_COMPLETE(28)
+- CONDITION_QUEST_NONE(14)
+- CONDITION_TEAM(6)
+- CONDITION_CLASS(15)
+- CONDITION_RACE(16)
+- CONDITION_INSTANCE_INFO(13)
+- CONDITION_LEVEL(27)
+
+The system supports dynamically recalculation on quest status or level change.
+
+[Phasing]
+
+`phasemask`
+=================
+If the phase definition fits to the player the phasemask is added to the player (bitmask addition - current_phasemask |= phasemask).
+
+`terrainswapmap`
+=================
+Usually taken from sniffs, represents the map from where the client takes some map tiles and shows it in the current view.
+For example map: 719 (Mount Hyjal burned default terrainswap).
+
+If you want to overwrite an existing terrainswap use the flag 1 (explained later) and the default map (1 - Kalimdor to reset the Mount Hyjal terrainswap).
+
+`phaseId`
+=================
+Usually taken from sniffs and 'phase.dbc', is sent to the client.
+
+[Extended Phasing - Flags]
+
+Now you should be able to write simple phase definitions.
+
+But you can use flags to make the phasing more complex.
+
+`flags`
+=================
+
+This flags are helping you to disable some phase definitions without using "negated conditions".
+
+We are looking at a short example:
+
+__________________________________________________
+This is a small Questchain with 2 phasmasks 2, 4
+And we want to show the player 2 different npcs after each quest at the same place. (2 -> 25362, 4 -> 27236)
+
+Our creature Insert would look like this:
+
+INSERT INTO `creature` (`guid`, `id`, `map`, `spawnMask`, `phaseMask`, `position_x`, `position_y`, `position_z`) VALUES
+(guid+1, 25362, map, spawnMask, 2 /*phasemask*/, x, y, z), // will be visible if you have the quest rewarded: 12345
+(guid+2, 27236, map, spawnMask, 4 /*phasemask*/, x, y, z); // will be visible if you have the quest rewarded: 54321
+
+Quest 12345
+|
+V
+Quest 54321
+
+The zone in which we like to phase is the "Kelp'Thar Forest" subzone in vashj'ir, that means we have to use its zone id (4815).
+You can find out the zoneId by using the .gps command.
+
+The phase_definition table has no entry for the zone 4815 so we are using the entrys 1-3.
+We start with the quest that you accept first: 25362.
+
+If you get the quest 25362 rewarded you will be automatically phased into phasemask 2 to see the npc 25362 (guid+1).
+
+Our Definition looks like this:
+INSERT INTO `phase_definitions` (`zoneId`, `entry`, `phasemask`, `phaseId`, `terrainswapmap`, `flags`, `comment`) VALUES
+(4815, 1, 2, 0, 0, 0, 'Example phasemask 2 to see npc 25362');
+
+zoneId -> Kelp'Thar Forest (4815)
+entry -> because it is the first definition
+phasemask -> 2
+phaseId -> 0 (we need no phase id)
+terrainswapmap -> (we don't want any terrainswap. Theres no terrainswap available for vashjir too).
+flags -> 0
+
+If you test this definition without a condition linked to this you will be automatically phased into phasemask 2,
+because the definition is active by default.
+
+A simple quest rewarded condition linked to our phase definition will look like this:
+
+INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `SourceId`, `ElseGroup`, `ConditionTypeOrReference`, `ConditionTarget`, `ConditionValue1`, `ConditionValue2`, `ConditionValue3`, `NegativeCondition`, `ErrorTextId`, `ScriptName`, `Comment`) VALUES
+(23, -- CONDITION_SOURCE_TYPE_PHASE_DEFINITION has source type 23
+4815, -- This is the zone of the linked definition -> Kelp'Thar Forest (4815)
+1, -- This is the entry of the linked definition
+0, 0, 8, 0, 12345, 0, 0, 0, 0, '', ''); -- This is the rest of a simple quest rewarded condition.
+
+Phase Definition for Quest: 54321
+==================================
+INSERT INTO `phase_definitions` (`zoneId`, `entry`, `phasemask`, `phaseId`, `terrainswapmap`, `flags`, `comment`) VALUES
+(4815, 2, 4, 0, 0, 1, 'Example phasemask 4 to see npc 54321');
+
+INSERT INTO `conditions` (`SourceTypeOrReferenceId`, `SourceGroup`, `SourceEntry`, `SourceId`, `ElseGroup`, `ConditionTypeOrReference`, `ConditionTarget`, `ConditionValue1`, `ConditionValue2`, `ConditionValue3`, `NegativeCondition`, `ErrorTextId`, `ScriptName`, `Comment`) VALUES
+(23, 4815, 2, 0, 0, 8, 0, 54321, 0, 0, 0, 0, '', '');
+
+This looks like the same as in above example with modified questid, entry and phasemask with one exeption:
+
+The flag column is not 0!
+
+Now you will learn to use another feature of the system: flags.
+
+Flags are used to define in which way phasemasks are added to the players phase if the phase condition fits to the player and how the phase is
+calculated further.
+
+You have to mention: Every phasemask is added from the lowest entry to the hightest entry.
+
+That means if you define following definitions...
+
+Entry 3, Phasemask 1, Flags 0
+Entry 1, Phasemask 8, Flags 0
+Entry 2, Phasemask 2, Flags 0
+
+the PhaseMgr would add it like this...
+
+| Entry 1, Phasemask 8, Flags 0
+|.. 8
+| Entry 2, Phasemask 2, Flags 0
+|.. 10
+| Entry 3, Phasemask 1, Flags 0
+V.. 11
+-----------------------------------
+Phasemask: 8|2|1 = 11
+__________________________________________
+-> PHASE_FLAG_OVERWRITE_EXISTING = 0x1 (1)
+
+If you define PHASE_FLAG_OVERWRITE_EXISTING the phase definition sets the current phasemask to 0.
+After this the phasemask of the definition is added
+
+Example:
+
+Entry 1, Phasemask 8, Flags 0
+Entry 2, Phasemask 16, Flags 0
+Entry 3, Phasemask 2, Flags 1
+Entry 4, Phasemask 1, Flags 0
+
+| Entry 1, Phasemask 8, Flags 0
+|.. 8
+| Entry 2, Phasemask 16, Flags 0
+|.. 24
+|-> Set to 0
+| Entry 3, Phasemask 2, Flags 1
+|.. 2
+| Entry 4, Phasemask 1, Flags 0
+V.. 3
+-----------------------------------
+Phasemask: 2|1 = 3
+__________________________________________
+-> PHASE_FLAG_NO_MORE_PHASES = 0x2 (2)
+
+If you define PHASE_FLAG_NO_MORE_PHASES the phasemgr will abort the phase calculation after the definition was added.
+
+Example:
+
+Entry 1, Phasemask 8, Flags 2
+Entry 2, Phasemask 2, Flags 0
+Entry 3, Phasemask 1, Flags 0
+
+| Entry 1, Phasemask 8, Flags 2
+|.. 8
+|-> Abort
+
+-----------------------------------
+Phasemask: 8 = 8
+
+__________________________________________
+-> PHASE_FLAG_NEGATE_PHASE = 0x4 (3)
+
+If you define PHASE_FLAG_NEGATE_PHASE the phasemgr will negate instead to add the phasemask.
+
+Entry 1, Phasemask 10, Flags 0
+Entry 2, Phasemask 2, Flags 4
+Entry 3, Phasemask 1, Flags 0
+
+| Entry 1, Phasemask 10, Flags 0
+|.. 10
+| Entry 2, Phasemask 2, Flags 4
+|.. 8 (10 &~ 2 or in this case 10 - 2)
+| Entry 3, Phasemask 1, Flags 0
+V.. 9
+-----------------------------------
+Phasemask: (10 &~ 2) | 1 = 9 
+ -----------------------------------
+|The Correct list for ConditionTypeOrReference
+ ----------------------------------
+
+    CONDITION_SOURCE_TYPE_NONE                           = 0,
+    CONDITION_SOURCE_TYPE_CREATURE_LOOT_TEMPLATE         = 1,
+    CONDITION_SOURCE_TYPE_DISENCHANT_LOOT_TEMPLATE       = 2,
+    CONDITION_SOURCE_TYPE_FISHING_LOOT_TEMPLATE          = 3,
+    CONDITION_SOURCE_TYPE_GAMEOBJECT_LOOT_TEMPLATE       = 4,
+    CONDITION_SOURCE_TYPE_ITEM_LOOT_TEMPLATE             = 5,
+    CONDITION_SOURCE_TYPE_MAIL_LOOT_TEMPLATE             = 6,
+    CONDITION_SOURCE_TYPE_MILLING_LOOT_TEMPLATE          = 7,
+    CONDITION_SOURCE_TYPE_PICKPOCKETING_LOOT_TEMPLATE    = 8,
+    CONDITION_SOURCE_TYPE_PROSPECTING_LOOT_TEMPLATE      = 9,
+    CONDITION_SOURCE_TYPE_REFERENCE_LOOT_TEMPLATE        = 10,
+    CONDITION_SOURCE_TYPE_SKINNING_LOOT_TEMPLATE         = 11,
+    CONDITION_SOURCE_TYPE_SPELL_LOOT_TEMPLATE            = 12,
+    CONDITION_SOURCE_TYPE_SPELL_IMPLICIT_TARGET          = 13,
+    CONDITION_SOURCE_TYPE_GOSSIP_MENU                    = 14,
+    CONDITION_SOURCE_TYPE_GOSSIP_MENU_OPTION             = 15,
+    CONDITION_SOURCE_TYPE_CREATURE_TEMPLATE_VEHICLE      = 16,
+    CONDITION_SOURCE_TYPE_SPELL                          = 17,
+    CONDITION_SOURCE_TYPE_SPELL_CLICK_EVENT              = 18,
+    CONDITION_SOURCE_TYPE_QUEST_ACCEPT                   = 19,
+    CONDITION_SOURCE_TYPE_QUEST_SHOW_MARK                = 20,
+    CONDITION_SOURCE_TYPE_VEHICLE_SPELL                  = 21,
+    CONDITION_SOURCE_TYPE_SMART_EVENT                    = 22,
+    CONDITION_SOURCE_TYPE_NPC_VENDOR                     = 23,
+    CONDITION_SOURCE_TYPE_SPELL_PROC                     = 24,
+    CONDITION_SOURCE_TYPE_PHASE_DEFINITION               = 25,
+    CONDITION_SOURCE_TYPE_MAX                            = 26  // MAX
+------------------------------------------
+|The Correct list for ConditionTypes
+ -----------------------------------------                                                          // value1           value2         value3
+    CONDITION_NONE                  = 0,                    // 0                0              0                  always true
+    CONDITION_AURA                  = 1,                    // spell_id         effindex       use target?        true if player (or target, if value3) has aura of spell_id with effect effindex
+    CONDITION_ITEM                  = 2,                    // item_id          count          bank               true if has #count of item_ids (if 'bank' is set it searches in bank slots too)
+    CONDITION_ITEM_EQUIPPED         = 3,                    // item_id          0              0                  true if has item_id equipped
+    CONDITION_ZONEID                = 4,                    // zone_id          0              0                  true if in zone_id
+    CONDITION_REPUTATION_RANK       = 5,                    // faction_id       rankMask       0                  true if has min_rank for faction_id
+    CONDITION_TEAM                  = 6,                    // player_team      0,             0                  469 - Alliance, 67 - Horde)
+    CONDITION_SKILL                 = 7,                    // skill_id         skill_value    0                  true if has skill_value for skill_id
+    CONDITION_QUESTREWARDED         = 8,                    // quest_id         0              0                  true if quest_id was rewarded before
+    CONDITION_QUESTTAKEN            = 9,                    // quest_id         0,             0                  true while quest active
+    CONDITION_DRUNKENSTATE          = 10,                   // DrunkenState     0,             0                  true if player is drunk enough
+    CONDITION_WORLD_STATE           = 11,                   // index            value          0                  true if world has the value for the index
+    CONDITION_ACTIVE_EVENT          = 12,                   // event_id         0              0                  true if event is active
+    CONDITION_INSTANCE_INFO         = 13,                   // entry            data           type               true if the instance info defined by type (enum InstanceInfo) equals data.
+    CONDITION_QUEST_NONE            = 14,                   // quest_id         0              0                  true if doesn't have quest saved
+    CONDITION_CLASS                 = 15,                   // class            0              0                  true if player's class is equal to class
+    CONDITION_RACE                  = 16,                   // race             0              0                  true if player's race is equal to race
+    CONDITION_ACHIEVEMENT           = 17,                   // achievement_id   0              0                  true if achievement is complete
+    CONDITION_TITLE                 = 18,                   // title id         0              0                  true if player has title
+    CONDITION_SPAWNMASK             = 19,                   // spawnMask        0              0                  true if in spawnMask
+    CONDITION_GENDER                = 20,                   // gender           0              0                  true if player's gender is equal to gender
+    CONDITION_UNIT_STATE            = 21,                   // unitState        0              0                  true if unit has unitState
+    CONDITION_MAPID                 = 22,                   // map_id           0              0                  true if in map_id
+    CONDITION_AREAID                = 23,                   // area_id          0              0                  true if in area_id
+    CONDITION_UNUSED_24             = 24,                   //
+    CONDITION_SPELL                 = 25,                   // spell_id         0              0                  true if player has learned spell
+    CONDITION_PHASEMASK             = 26,                   // phasemask        0              0                  true if object is in phasemask
+    CONDITION_LEVEL                 = 27,                   // level            ComparisonType 0                  true if unit's level is equal to param1 (param2 can modify the statement)
+    CONDITION_QUEST_COMPLETE        = 28,                   // quest_id         0              0                  true if player has quest_id with all objectives complete, but not yet rewarded
+    CONDITION_NEAR_CREATURE         = 29,                   // creature entry   distance       0                  true if there is a creature of entry in range
+    CONDITION_NEAR_GAMEOBJECT       = 30,                   // gameobject entry distance       0                  true if there is a gameobject of entry in range
+    CONDITION_OBJECT_ENTRY          = 31,                   // TypeID           entry          0                  true if object is type TypeID and the entry is 0 or matches entry of the object
+    CONDITION_TYPE_MASK             = 32,                   // TypeMask         0              0                  true if object is type object's TypeMask matches provided TypeMask
+    CONDITION_RELATION_TO           = 33,                   // ConditionTarget  RelationType   0                  true if object is in given relation with object specified by ConditionTarget
+    CONDITION_REACTION_TO           = 34,                   // ConditionTarget  rankMask       0                  true if object's reaction matches rankMask object specified by ConditionTarget
+    CONDITION_DISTANCE_TO           = 35,                   // ConditionTarget  distance       ComparisonType     true if object and ConditionTarget are within distance given by parameters
+    CONDITION_ALIVE                 = 36,                   // 0                0              0                  true if unit is alive
+    CONDITION_HP_VAL                = 37,                   // hpVal            ComparisonType 0                  true if unit's hp matches given value
+    CONDITION_HP_PCT                = 38,                   // hpPct            ComparisonType 0                  true if unit's hp matches given pct
+    CONDITION_MAX                   = 39                    // MAX
+------------------------------------------
