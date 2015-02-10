@@ -743,7 +743,7 @@ public:
 
             uiDazzlingDestructionCount = 0;
 
-            if (Creature* Valiona = me->FindNearestCreature(NPC_VALIONA_BOT, 500.0f, true))
+            if (Creature* Valiona = me->FindNearestCreature(NPC_VALIONA_BOT, 3000.0f, true))
                 if(Valiona && !Valiona->isInCombat())
                     Valiona->AI()->AttackStart(me->GetVictim());
 
@@ -838,7 +838,7 @@ public:
             if (instance)
                 instance->SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, me); // Remove
 
-            if (Creature* Valiona = me->FindNearestCreature(NPC_VALIONA_BOT, 500.0f, true))
+            if (Creature* Valiona = me->FindNearestCreature(NPC_VALIONA_BOT, 3000.0f, true))
                 Valiona->Kill(Valiona);
 
             _JustDied();
