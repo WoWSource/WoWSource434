@@ -1507,8 +1507,9 @@ class boss_monstrosity : public CreatureScript
                 Creature* ignacious = me->FindNearestCreature(NPC_IGNACIOUS, 500.0f, true); 
                 Creature* arion = me->FindNearestCreature(NPC_ARION, 500.0f, true); 
                 Creature* terrastra = me->FindNearestCreature(NPC_TERRASTRA, 500.0f, true);   
+				Creature* controller = me->FindNearestCreature(NPC_ASCENDANT_CONTROLLER, 1000.0f, true);
   
-                if (feludius && ignacious && arion && terrastra) // Check to prevent any damn crashes.
+                if (feludius && ignacious && arion && terrastra && controller) // Check to prevent any damn crashes.
                 {
                     feludius->SetDisplayId(MODEL_FELUDIUS);
                     terrastra->SetDisplayId(MODEL_TERRASTRA);
@@ -1522,6 +1523,8 @@ class boss_monstrosity : public CreatureScript
                     terrastra->AI()->EnterEvadeMode();
                     arion->AI()->EnterEvadeMode();
                     ignacious->AI()->EnterEvadeMode();
+					controller->AI()->EnterEvadeMode();
+					
                     me->DespawnOrUnsummon();
                 }
 
