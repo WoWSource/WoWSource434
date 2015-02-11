@@ -73,8 +73,12 @@ void WorldSession::HandleMoveWorldportAckOpcode()
 	Map* newMap = sMapMgr->CreateMap(loc.GetMapId(), GetPlayer());
     if (GetPlayer()->IsInWorld())
     {
-        sLog->outError(LOG_FILTER_NETWORKIO, "%s %s is still in world when teleported from map %s (%u) to new map %s (%u)",  oldMap->GetId(), newMap ? newMap->GetMapName() : "Unknown", loc.GetMapId()); 
-        oldMap->RemovePlayerFromMap(GetPlayer(), false);
+		if (sLog != NULL && oldMap != NULL && oldMap->GetId() != NULL && newMap != NULL && newMap->GetMapName() != NULL
+			&& loc.GetMapId() != NULL){
+			sLog->outError(LOG_FILTER_NETWORKIO, "%u is still in world when teleported from map %u to new map %u",
+				oldMap->GetId(), newMap ? newMap->GetMapName() : "Unknown", loc.GetMapId());
+			oldMap->RemovePlayerFromMap(GetPlayer(), false);
+		}
     }
 
     // relocate the player to the teleport destination
